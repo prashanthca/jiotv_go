@@ -11,6 +11,7 @@ import (
 	"github.com/jiotv-go/jiotv_go/v3/internal/config"
 	"github.com/jiotv-go/jiotv_go/v3/internal/constants/headers"
 	"github.com/jiotv-go/jiotv_go/v3/internal/constants/urls"
+	"github.com/jiotv-go/jiotv_go/v3/internal/plugins"
 	internalUtils "github.com/jiotv-go/jiotv_go/v3/internal/utils"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/secureurl"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/television"
@@ -508,6 +509,11 @@ func ChannelsHandler(c *fiber.Ctx) error {
 	if err != nil {
 		return ErrorMessageHandler(c, err)
 	}
+
+	if len(config.Cfg.Plugins) > 0 {
+		pluginChannels := plugins.GetChannels()
+		apiResponse.Result = append(apiResponse.Result, pluginChannels...)
+	}
 	// hostUrl should be request URL like http://localhost:5001
 	hostURL := strings.ToLower(c.Protocol()) + "://" + c.Hostname()
 
@@ -527,10 +533,14 @@ func ChannelsHandler(c *fiber.Ctx) error {
 			}
 
 			var channelURL string
-			if quality != "" {
-				channelURL = fmt.Sprintf("%s/live/%s/%s.m3u8", hostURL, quality, channel.ID)
+			if !channel.IsCustom {
+				if quality != "" {
+					channelURL = fmt.Sprintf("%s/live/%s/%s.m3u8", hostURL, quality, channel.ID)
+				} else {
+					channelURL = fmt.Sprintf("%s/live/%s.m3u8", hostURL, channel.ID)
+				}
 			} else {
-				channelURL = fmt.Sprintf("%s/live/%s.m3u8", hostURL, channel.ID)
+				channelURL = fmt.Sprintf("%s/%s", hostURL, channel.URL)
 			}
 			var channelLogoURL string
 			if strings.HasPrefix(channel.LogoURL, "http://") || strings.HasPrefix(channel.LogoURL, "https://") {
@@ -560,7 +570,9 @@ func ChannelsHandler(c *fiber.Ctx) error {
 	}
 
 	for i, channel := range apiResponse.Result {
-		apiResponse.Result[i].URL = fmt.Sprintf("%s/live/%s", hostURL, channel.ID)
+		if !channel.IsCustom {
+			apiResponse.Result[i].URL = fmt.Sprintf("%s/live/%s", hostURL, channel.ID)
+		}
 	}
 
 	return c.JSON(apiResponse)
