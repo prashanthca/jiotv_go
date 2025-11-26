@@ -9,7 +9,6 @@ import (
     "io"
     "net/http"
     "net/url"
-    "os"
     "regexp"
     "strings"
     "crypto/md5"
@@ -17,8 +16,13 @@ import (
     "github.com/google/uuid"
     "github.com/gofiber/fiber/v2"
     "github.com/jiotv-go/jiotv_go/v3/pkg/secureurl"
-    "github.com/jiotv-go/jiotv_go/v3/internal/constants/headers"
     "github.com/jiotv-go/jiotv_go/v3/pkg/utils"
+)
+
+const (
+    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0"
+    // ZEE5_DUMMY_CHANNEL_ID is a placeholder channel used for bootstrapping token generation.
+    ZEE5_DUMMY_CHANNEL_ID = "0-9-9z583538"
 )
 
 func getMD5Hash(text string) string {
@@ -117,7 +121,7 @@ func fetchM3u8URL(guestToken, platformToken, ddToken string, userAgent string) (
     }
     
     q := u.Query()
-    q.Set("channel_id", "0-9-9z583538")
+    q.Set("channel_id", ZEE5_DUMMY_CHANNEL_ID)
     q.Set("device_id", guestToken)
     q.Set("platform_name", "desktop_web")
     q.Set("translation", "en")
@@ -172,14 +176,12 @@ func fetchM3u8URL(guestToken, platformToken, ddToken string, userAgent string) (
     // Extract the 'video_token'
     keyOsDetails, ok := responseData["keyOsDetails"].(map[string]interface{})
     if !ok {
-        fmt.Fprintln(os.Stderr, "Error: Could not fetch m3u8 URL (keyOsDetails missing).")
-        os.Exit(1)
+        return "", fmt.Errorf("keyOsDetails missing in response")
     }
 
     videoToken, ok := keyOsDetails["video_token"].(string)
     if !ok || videoToken == "" {
-        fmt.Fprintln(os.Stderr, "Error: Could not fetch m3u8 URL (video_token missing).")
-        os.Exit(1)
+        return "", fmt.Errorf("video_token missing in response")
     }
     
     // Simple URL validation check
@@ -298,7 +300,7 @@ func fetchContent(targetURL string) ([]byte, http.Header, error) {
 		return nil, nil, err
 	}
 
-	req.Header.Set("User-Agent", headers.UserAgentPlayTV)
+	req.Header.Set("User-Agent", USER_AGENT)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -350,19 +352,8 @@ func handlePlaylist(c *fiber.Ctx, isMaster bool, targetURLStr string, prefix str
 			processedLines = append(processedLines, line)
 			continue
 		}
-		if strings.HasPrefix(trimmed, "#EXT-X-MAP") {
-			// Handle URI inside EXT-X-MAP
-			matches := reMediaURI.FindStringSubmatch(trimmed)
-			if len(matches) > 1 {
-				originalURI := matches[1]
-				newURI := transformURL(originalURI, baseURL, isMaster, prefix)
-				line = strings.Replace(line, originalURI, newURI, 1)
-			}
-			processedLines = append(processedLines, line)
-			continue
-		}
-		if strings.HasPrefix(trimmed, "#EXT-X-MEDIA") {
-			// Handle URI inside EXT-X-MEDIA
+		if strings.HasPrefix(trimmed, "#EXT-X-MAP") || strings.HasPrefix(trimmed, "#EXT-X-MEDIA") {
+			// Handle URI inside EXT-X-MAP or EXT-X-MEDIA
 			matches := reMediaURI.FindStringSubmatch(trimmed)
 			if len(matches) > 1 {
 				originalURI := matches[1]

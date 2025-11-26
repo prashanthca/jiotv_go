@@ -6,22 +6,15 @@ import (
 	"embed"
 	"encoding/json"
 	"strings"
-	"github.com/jiotv-go/jiotv_go/v3/internal/constants/headers"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/secureurl"
-	"github.com/jiotv-go/jiotv_go/v3/pkg/utils"
 	"time"
-	"log"
 )
 
 var cache *expirable.LRU[string, string]
 
 func init() {
-	var err error
 	cache = expirable.NewLRU[string, string](50, nil, time.Second*3600)
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 type ChannelItem struct {
     ID   string `json:"id"`
@@ -29,6 +22,7 @@ type ChannelItem struct {
     URL  string `json:"url"`
     Logo string `json:"logo"`
 	Language int `json:"language"`
+	Slug string `json:"slug"`
 }
 
 type DataFile struct {
@@ -51,11 +45,11 @@ func readDataFile() (*DataFile, error) {
 //go:embed data.json
 var dataFile embed.FS
 func LiveHandler(c *fiber.Ctx) error {
-	utils.Log.Println("LiveHandler", "id", c.Params("id"))
 	id := c.Params("id")
 	id = strings.Replace(id, ".m3u8", "", 1)
 	data, err := readDataFile()
 	if err != nil {
+		c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 		return err
 	}
 	url := ""
@@ -70,17 +64,17 @@ func LiveHandler(c *fiber.Ctx) error {
 		c.Set("ID", id)
 		return c.SendString("Channel not found")
 	}
-	uaHash := getMD5Hash(headers.UserAgentPlayTV)
+	uaHash := getMD5Hash(USER_AGENT)
     cookie, found := cache.Get(uaHash)
 	if !found {
-		cookieMap, err := generateCookieZee5(headers.UserAgentPlayTV)
+		cookieMap, err := generateCookieZee5(USER_AGENT)
 		if err != nil {
+			c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 			return err
 		}
 		cookie = cookieMap["cookie"]
 		cache.Add(uaHash, cookie)
 	}
-	utils.Log.Println("LiveHandler", "cookie", cookie)
 	hostURL := strings.ToLower(c.Protocol()) + "://" + c.Hostname()
 	handlePlaylist(c, true, url+"?"+cookie, hostURL)
 	return nil
