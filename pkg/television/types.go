@@ -26,6 +26,7 @@ type Channel struct {
 	Category int    `json:"channelCategoryId"`
 	Language int    `json:"channelLanguageId"`
 	IsHD     bool   `json:"isHD"`
+	IsCustom bool   `json:"-"`
 }
 
 // UnmarshalJSON to Override Channel.ID to convert int from json to string
