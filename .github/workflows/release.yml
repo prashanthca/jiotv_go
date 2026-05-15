@@ -95,5 +95,5 @@ jobs:
           files: |
             ./bin/*
           generate_release_notes: true
-          discussion_category_name: releases
+          #discussion_category_name: releases
           token: ${{ secrets.PAT }}
