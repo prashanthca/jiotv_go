@@ -28,6 +28,7 @@ type Channel struct {
 	IsHD     bool   `json:"isHD"`
 	IsCatchupAvailable bool   `json:"isCatchupAvailable"`
 	IsCustom bool   `json:"-"`
+	PluginID string `json:"-"`
 }
 
 // UnmarshalJSON to Override Channel.ID to convert int from json to string

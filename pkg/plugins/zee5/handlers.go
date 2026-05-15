@@ -8,6 +8,7 @@ import (
 	"strings"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jiotv-go/jiotv_go/v3/pkg/secureurl"
+	internalUtils "github.com/jiotv-go/jiotv_go/v3/internal/utils"
 	"time"
 )
 
@@ -22,6 +23,7 @@ type ChannelItem struct {
     URL  string `json:"url"`
     Logo string `json:"logo"`
 	Language int `json:"language"`
+	Genre int `json:"genre"`
 	Slug string `json:"slug"`
 }
 
@@ -86,9 +88,32 @@ func RenderMP4ChunkHandler(c *fiber.Ctx) error {
 
 func RegisterRoutes(app *fiber.App) {
 	app.Get("/zee5/:id", LiveHandler)
+	app.Get("/zee5/play/:id", PlayHandler)
+	app.Get("/zee5/player/:id", PlayerHandler)
 	app.Get("/zee5/render/playlist.m3u8", RenderHandler)
 	app.Get("/zee5/render/segment.ts", RenderTSChunkHandler)
 	app.Get("/zee5/render/segment.mp4", RenderMP4ChunkHandler)
+}
+
+func PlayHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	player_url := "/zee5/player/" + id
+
+	internalUtils.SetCacheHeader(c, 3600)
+	return c.Render("views/play", fiber.Map{
+		"Title":      "Zee5",
+		"player_url": player_url,
+		"ChannelID":  id,
+	})
+}
+
+func PlayerHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	play_url := "/zee5/"+id+".m3u8"
+	internalUtils.SetCacheHeader(c, 3600)
+	return c.Render("views/player_hls", fiber.Map{
+		"play_url": play_url,
+	})
 }
 
 func GetChannels() []television.Channel {
@@ -103,10 +128,12 @@ func GetChannels() []television.Channel {
 			Name:     channelItem.Name,
 			URL:      "zee5/" + channelItem.ID,
 			LogoURL:  channelItem.Logo,
-			Category: 0,
+			Category: channelItem.Genre,
 			Language: channelItem.Language,
 			IsHD:     false,
 			IsCustom: true,
+			PluginID: "zee5",
+			IsCatchupAvailable: false,
 		})
 	}
 	return channels

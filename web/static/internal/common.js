@@ -60,7 +60,11 @@ function applyCatchupToCards() {
   cards.forEach((card) => {
     const id = card && card.getAttribute("data-channel-id");
     if (id) {
-      card.setAttribute("href", base + encodeURIComponent(id) + suffix);
+      if (card.getAttribute("data-plugin-id")) {
+        card.setAttribute("href", "/" + card.getAttribute("data-plugin-id") + base + encodeURIComponent(id) + suffix);
+      } else {
+        card.setAttribute("href", base + encodeURIComponent(id) + suffix);
+      }
     }
   });
 }

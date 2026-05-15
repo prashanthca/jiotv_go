@@ -51,12 +51,22 @@
   </div>
   <div id="original-channels-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-4">
     {{range $channel := .Channels}}
+    {{ if $channel.IsCustom }}
+    <a
+      href="/{{$channel.PluginID}}/play/{{$channel.ID}}"
+      class="card relative border border-primary shadow-lg hover:shadow-xl hover:bg-base-300 transition-all duration-200 ease-in-out scale-100 hover:scale-105 group"
+      data-channel-id="{{$channel.ID}}"
+      data-plugin-id="{{$channel.PluginID}}"
+      tabindex="0"
+    >
+    {{ else }}
     <a
       href="/play/{{$channel.ID}}"
       class="card relative border border-primary shadow-lg hover:shadow-xl hover:bg-base-300 transition-all duration-200 ease-in-out scale-100 hover:scale-105 group"
       data-channel-id="{{$channel.ID}}"
       tabindex="0"
     >
+    {{end}}
       <div class="flex flex-col items-center p-2 sm:p-4">
         <img
           src="{{$channel.LogoURL}}"

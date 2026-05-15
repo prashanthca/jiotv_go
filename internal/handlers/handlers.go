@@ -132,7 +132,10 @@ func IndexHandler(c *fiber.Ctx) error {
 	if err != nil {
 		return ErrorMessageHandler(c, err)
 	}
-
+	if len(config.Cfg.Plugins) > 0 {
+		pluginChannels := plugins.GetChannels()
+		channels.Result = append(channels.Result, pluginChannels...)
+	}
 	// Get language and category from query params
 	language := c.Query("language")
 	category := c.Query("category")
@@ -140,12 +143,14 @@ func IndexHandler(c *fiber.Ctx) error {
 	// Process logo URLs for all channels
 	hostURL := c.Protocol() + "://" + c.Hostname()
 	for i, channel := range channels.Result {
-		if strings.HasPrefix(channel.LogoURL, "http://") || strings.HasPrefix(channel.LogoURL, "https://") {
-			// Custom channel with full URL, use as-is
-			channels.Result[i].LogoURL = channel.LogoURL
-		} else {
-			// Regular channel with relative path, add proxy prefix
-			channels.Result[i].LogoURL = hostURL + "/jtvimage/" + channel.LogoURL
+		if !channel.IsCustom {
+			if strings.HasPrefix(channel.LogoURL, "http://") || strings.HasPrefix(channel.LogoURL, "https://") {
+				// Custom channel with full URL, use as-is
+				channels.Result[i].LogoURL = channel.LogoURL
+			} else {
+				// Regular channel with relative path, add proxy prefix
+				channels.Result[i].LogoURL = hostURL + "/jtvimage/" + channel.LogoURL
+			}
 		}
 	}
 
