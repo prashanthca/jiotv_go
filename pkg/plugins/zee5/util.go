@@ -11,6 +11,7 @@ import (
     "net/http"
     "net/url"
     "regexp"
+	"time"
     "strings"
     "github.com/google/uuid"
     "github.com/gofiber/fiber/v2"
@@ -19,9 +20,40 @@ import (
 )
 
 const (
-    USER_AGENT   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0"
+    USER_AGENT   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0"
     playbackURL  = "https://spapi.zee5.com/singlePlayback/getDetails/secure"
 )
+
+var (
+	client = newClient()
+)
+
+type AddHeaderTransport struct {
+    base http.RoundTripper
+}
+
+func (t *AddHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	reqCopy := req.Clone(req.Context())
+    req.Header.Set("User-Agent", USER_AGENT)
+	req.Header.Set("Origin", "https://www.zee5.com")
+	req.Header.Set("Referer", "https://www.zee5.com/")
+    return t.base.RoundTrip(reqCopy)
+}
+
+func newClient() *http.Client {
+	_client := &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &AddHeaderTransport{base: http.DefaultTransport},
+	}
+	_client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		// Preserve headers on redirect
+		req.Header.Set("User-Agent", USER_AGENT)
+		req.Header.Set("Origin", "https://www.zee5.com")
+		req.Header.Set("Referer", "https://www.zee5.com/")
+		return nil
+	}
+	return _client
+}
 
 // generateDDToken generates the 'x-dd-token' header value by Base64 encoding
 // a JSON string of device capabilities.
@@ -68,7 +100,6 @@ func generateGuestToken() string {
 
 // fetchPlatformToken GETs the ZEE5 homepage and extracts the embedded platformToken.
 func fetchPlatformToken(userAgent string) (string, error) {
-    client := &http.Client{}
     req, err := http.NewRequest("GET", "https://www.zee5.com/", nil)
     if err != nil {
         return "", fmt.Errorf("failed to create request: %w", err)
@@ -156,7 +187,6 @@ func fetchVideoToken(channelID string) (string, error) {
 		XDDToken:      ddToken,
 	})
 
-	client := &http.Client{}
 	req, err := http.NewRequest("POST", playbackURL+"?"+q.Encode(), bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
@@ -234,12 +264,17 @@ func transformURL(relURLStr string, baseURL *url.URL, isMaster bool, prefix stri
 }
 
 func fetchContent(targetURL string) ([]byte, http.Header, error) {
-	client := &http.Client{}
 	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Origin", "https://www.zee5.com")
+	req.Header.Set("Referer", "https://www.zee5.com/")
 	req.Header.Set("User-Agent", USER_AGENT)
 
 	resp, err := client.Do(req)
@@ -252,8 +287,21 @@ func fetchContent(targetURL string) ([]byte, http.Header, error) {
 		return nil, nil, fmt.Errorf("upstream returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	return body, resp.Header, err
+    var reader io.Reader = resp.Body
+    if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+        gz, err := gzip.NewReader(resp.Body)
+        if err != nil {
+            return nil, nil, fmt.Errorf("gzip reader: %w", err)
+        }
+        defer gz.Close()
+        reader = gz
+    }
+
+    bodyBytes, err := io.ReadAll(reader)
+    if err != nil {
+        return nil, nil, fmt.Errorf("reading zee5.com body: %w", err)
+    }
+	return bodyBytes, resp.Header, err
 }
 
 // handlePlaylist contains the common logic for processing m3u8 playlists
