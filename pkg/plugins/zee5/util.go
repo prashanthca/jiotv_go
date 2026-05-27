@@ -1,27 +1,28 @@
 package zee5
 
 import (
-    "bytes"
-    "bufio"
-    "compress/gzip"
-    "encoding/base64"
-    "encoding/json"
-    "fmt"
-    "io"
-    "net/http"
-    "net/url"
-    "regexp"
+	"bufio"
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
 	"time"
-    "strings"
-    "github.com/google/uuid"
-    "github.com/gofiber/fiber/v2"
-    "github.com/jiotv-go/jiotv_go/v3/pkg/secureurl"
-    "github.com/jiotv-go/jiotv_go/v3/pkg/utils"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"github.com/jiotv-go/jiotv_go/v3/pkg/secureurl"
+	"github.com/jiotv-go/jiotv_go/v3/pkg/utils"
 )
 
 const (
-    USER_AGENT   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0"
-    playbackURL  = "https://spapi.zee5.com/singlePlayback/getDetails/secure"
+	USER_AGENT  = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0"
+	playbackURL = "https://spapi.zee5.com/singlePlayback/getDetails/secure"
 )
 
 var (
@@ -29,20 +30,20 @@ var (
 )
 
 type AddHeaderTransport struct {
-    base http.RoundTripper
+	base http.RoundTripper
 }
 
 func (t *AddHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	reqCopy := req.Clone(req.Context())
-    req.Header.Set("User-Agent", USER_AGENT)
+	req.Header.Set("User-Agent", USER_AGENT)
 	req.Header.Set("Origin", "https://www.zee5.com")
 	req.Header.Set("Referer", "https://www.zee5.com/")
-    return t.base.RoundTrip(reqCopy)
+	return t.base.RoundTrip(reqCopy)
 }
 
 func newClient() *http.Client {
 	_client := &http.Client{
-		Timeout: 15 * time.Second,
+		Timeout:   15 * time.Second,
 		Transport: &AddHeaderTransport{base: http.DefaultTransport},
 	}
 	_client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -58,87 +59,87 @@ func newClient() *http.Client {
 // generateDDToken generates the 'x-dd-token' header value by Base64 encoding
 // a JSON string of device capabilities.
 func generateDDToken() (string, error) {
-    data := map[string]interface{}{
-        "schema_version": "1",
-        "os_name": "N/A",
-        "os_version": "N/A",
-        "platform_name": "Chrome",
-        "platform_version": "104",
-        "device_name": "",
-        "app_name": "Web",
-        "app_version": "2.52.31",
-        "player_capabilities": map[string]interface{}{
-            "audio_channel": []string{"STEREO"},
-            "video_codec":   []string{"H264"},
-            "container":     []string{"MP4", "TS"},
-            "package":       []string{"DASH", "HLS"},
-            "resolution":    []string{"240p", "SD", "HD", "FHD"},
-            "dynamic_range": []string{"SDR"},
-        },
-        "security_capabilities": map[string]interface{}{
-            "encryption":              []string{"WIDEVINE_AES_CTR"},
-            "widevine_security_level": []string{"L3"},
-            "hdcp_version":            []string{"HDCP_V1", "HDCP_V2", "HDCP_V2_1", "HDCP_V2_2"},
-        },
-    }
+	data := map[string]interface{}{
+		"schema_version":   "1",
+		"os_name":          "N/A",
+		"os_version":       "N/A",
+		"platform_name":    "Chrome",
+		"platform_version": "104",
+		"device_name":      "",
+		"app_name":         "Web",
+		"app_version":      "2.52.31",
+		"player_capabilities": map[string]interface{}{
+			"audio_channel": []string{"STEREO"},
+			"video_codec":   []string{"H264"},
+			"container":     []string{"MP4", "TS"},
+			"package":       []string{"DASH", "HLS"},
+			"resolution":    []string{"240p", "SD", "HD", "FHD"},
+			"dynamic_range": []string{"SDR"},
+		},
+		"security_capabilities": map[string]interface{}{
+			"encryption":              []string{"WIDEVINE_AES_CTR"},
+			"widevine_security_level": []string{"L3"},
+			"hdcp_version":            []string{"HDCP_V1", "HDCP_V2", "HDCP_V2_1", "HDCP_V2_2"},
+		},
+	}
 
-    jsonBytes, err := json.Marshal(data)
-    if err != nil {
-        return "", fmt.Errorf("failed to marshal JSON: %w", err)
-    }
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal JSON: %w", err)
+	}
 
-    // Base64 encode the JSON bytes
-    encoded := base64.StdEncoding.EncodeToString(jsonBytes)
+	// Base64 encode the JSON bytes
+	encoded := base64.StdEncoding.EncodeToString(jsonBytes)
 
-    return encoded, nil
+	return encoded, nil
 }
 
 // generateGuestToken generates a version 4 (random) UUID string.
 func generateGuestToken() string {
-    return uuid.New().String()
+	return uuid.New().String()
 }
 
 // fetchPlatformToken GETs the ZEE5 homepage and extracts the embedded platformToken.
 func fetchPlatformToken(userAgent string) (string, error) {
-    req, err := http.NewRequest("GET", "https://www.zee5.com/", nil)
-    if err != nil {
-        return "", fmt.Errorf("failed to create request: %w", err)
-    }
-    req.Header.Set("User-Agent", userAgent)
-    req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-    req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req, err := http.NewRequest("GET", "https://www.zee5.com/", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
-    resp, err := client.Do(req)
-    if err != nil {
-        return "", fmt.Errorf("GET zee5.com: %w", err)
-    }
-    defer resp.Body.Close()
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("GET zee5.com: %w", err)
+	}
+	defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        return "", fmt.Errorf("GET zee5.com returned HTTP %d", resp.StatusCode)
-    }
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GET zee5.com returned HTTP %d", resp.StatusCode)
+	}
 
-    var reader io.Reader = resp.Body
-    if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
-        gz, err := gzip.NewReader(resp.Body)
-        if err != nil {
-            return "", fmt.Errorf("gzip reader: %w", err)
-        }
-        defer gz.Close()
-        reader = gz
-    }
+	var reader io.Reader = resp.Body
+	if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+		gz, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("gzip reader: %w", err)
+		}
+		defer gz.Close()
+		reader = gz
+	}
 
-    bodyBytes, err := io.ReadAll(reader)
-    if err != nil {
-        return "", fmt.Errorf("reading zee5.com body: %w", err)
-    }
+	bodyBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("reading zee5.com body: %w", err)
+	}
 
-    re := regexp.MustCompile(`"platformToken":"([^"]+)"`)
-    matches := re.FindSubmatch(bodyBytes)
-    if matches == nil {
-        return "", fmt.Errorf("platformToken not found in zee5.com HTML")
-    }
-    return string(matches[1]), nil
+	re := regexp.MustCompile(`"platform_token":{"token":"([^"]+)"}`)
+	matches := re.FindSubmatch(bodyBytes)
+	if matches == nil {
+		return "", fmt.Errorf("platformToken not found in zee5.com HTML")
+	}
+	return string(matches[1]), nil
 }
 
 type playbackRequest struct {
@@ -248,7 +249,7 @@ func transformURL(relURLStr string, baseURL *url.URL, isMaster bool, prefix stri
 	if isM3U8 {
 		// Construct new URL
 		newParams := url.Values{}
-		
+
 		newParams.Set("auth", coded_url)
 		return fmt.Sprintf("%s/zee5/render/playlist.m3u8?%s", prefix, newParams.Encode())
 
@@ -287,20 +288,20 @@ func fetchContent(targetURL string) ([]byte, http.Header, error) {
 		return nil, nil, fmt.Errorf("upstream returned status %d", resp.StatusCode)
 	}
 
-    var reader io.Reader = resp.Body
-    if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
-        gz, err := gzip.NewReader(resp.Body)
-        if err != nil {
-            return nil, nil, fmt.Errorf("gzip reader: %w", err)
-        }
-        defer gz.Close()
-        reader = gz
-    }
+	var reader io.Reader = resp.Body
+	if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+		gz, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, nil, fmt.Errorf("gzip reader: %w", err)
+		}
+		defer gz.Close()
+		reader = gz
+	}
 
-    bodyBytes, err := io.ReadAll(reader)
-    if err != nil {
-        return nil, nil, fmt.Errorf("reading zee5.com body: %w", err)
-    }
+	bodyBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading zee5.com body: %w", err)
+	}
 	return bodyBytes, resp.Header, err
 }
 
@@ -314,7 +315,7 @@ func handlePlaylist(c *fiber.Ctx, isMaster bool, targetURLStr string, prefix str
 	// Fetch content
 	content, _, err := fetchContent(targetURLStr)
 	if err != nil {
-        c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("failed to fetch: %v", err))
+		c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("failed to fetch: %v", err))
 		return
 	}
 
@@ -328,7 +329,7 @@ func handlePlaylist(c *fiber.Ctx, isMaster bool, targetURLStr string, prefix str
 	// Process content
 	var processedLines []string
 	scanner := bufio.NewScanner(bytes.NewReader(content))
-	
+
 	// Regex for EXT-X-MEDIA URI
 	reMediaURI := regexp.MustCompile(`URI="([^"]+)"`)
 
